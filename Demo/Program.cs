@@ -45,7 +45,7 @@ namespace Demo
         {
             private static readonly int mapW = 32;
             private static readonly int mapH = 32;
-            private static readonly int depth = 32;
+            private static readonly int depth = 64;
             private static readonly double fov = Math.PI / 4.0;
 
             // The default X value of the player  
@@ -349,7 +349,7 @@ namespace Demo
         static void Main(string[] args)
         {
             var game = new FPSDemo();
-            game.ConstructConsole(180, 100, 8, 8);
+            game.ConstructConsole(200, 120, 8, 8);
             game.Start();
         }
     }

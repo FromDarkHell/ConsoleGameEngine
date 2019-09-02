@@ -58,18 +58,13 @@ namespace ConsoleGameEngine
             cfi.FaceName = "Liberation Mono";
             if (!SetCurrentConsoleFontEx(m_hConsole, false, cfi))
                 throw new Exception("SetCurrentConsoleFontEx");
-            COORD coordLargest = GetLargestConsoleWindowSize(m_hConsole);
-            if (m_nScreenHeight > coordLargest.Y)
-                throw new Exception("Game Height Too Big");
-            if (m_nScreenWidth > coordLargest.X)
-                throw new Exception("Game Width Too Big");
-            SetConsoleCP(65001);
-            COORD buffer;
-            buffer.X = (short)m_nScreenWidth;
-            buffer.Y = (short)m_nScreenHeight;
 
-            if (!SetConsoleScreenBufferSize(m_hConsole, buffer))
-                throw new Exception("SetConsoleScreenBufferSize");
+            COORD coordLargest = GetLargestConsoleWindowSize(m_hConsole);
+
+            if (height > coordLargest.Y)
+                throw new Exception("Screen Height / Font Height Too Big");
+            if (width > coordLargest.X)
+                throw new Exception("Screen Width / Font Width Too Big");
 
             m_rectWindow.Left = 0;
             m_rectWindow.Top = 0;
@@ -78,6 +73,14 @@ namespace ConsoleGameEngine
 
             if (!SetConsoleWindowInfo(m_hConsole, true, ref m_rectWindow))
                 throw new Exception("SetConsoleWindowInfo");
+
+            COORD buffer;
+            buffer.X = (short)m_nScreenWidth;
+            buffer.Y = (short)m_nScreenHeight;
+
+            if (!SetConsoleScreenBufferSize(m_hConsole, buffer))
+                throw new Exception("SetConsoleScreenBufferSize");
+
             uint args = (uint)(ConsoleModes.ENABLE_EXTENDED_FLAGS | ConsoleModes.ENABLE_WINDOW_INPUT | ConsoleModes.ENABLE_MOUSE_INPUT);
             if (!SetConsoleMode(m_hConsoleIn, args))
                 throw new Exception("SetConsoleMode");
@@ -103,7 +106,7 @@ namespace ConsoleGameEngine
             return m_nScreenHeight;
         }
 
-        public void Draw(int x, int y, PIXEL_TYPE pixel = PIXEL_TYPE.PIXEL_SOLID, COLOR col = COLOR.FG_WHITE)
+        public virtual void Draw(int x, int y, PIXEL_TYPE pixel = PIXEL_TYPE.PIXEL_SOLID, COLOR col = COLOR.FG_WHITE)
         {
             if (x >= 0 && x < m_nScreenWidth && y >= 0 && y < m_nScreenHeight)
             {
@@ -112,7 +115,7 @@ namespace ConsoleGameEngine
             }
         }
 
-        public void Draw(int x, int y, char pixel, COLOR col = COLOR.FG_WHITE)
+        public virtual void Draw(int x, int y, char pixel, COLOR col = COLOR.FG_WHITE)
         {
             if (x >= 0 && x < m_nScreenWidth && y >= 0 && y < m_nScreenHeight)
             {
@@ -138,6 +141,18 @@ namespace ConsoleGameEngine
             {
                 m_bufScreen[y * m_nScreenWidth + x + i].UnicodeChar = c[i];
                 m_bufScreen[y * m_nScreenWidth + x + i].Attributes = (ushort)col;
+            }
+        }
+
+        public void DrawStringAlpha(int x, int y, string c, COLOR col = COLOR.FG_WHITE)
+        {
+            for (int i = 0; i < c.Length; i++)
+            {
+                if (c[i] != ' ')
+                {
+                    m_bufScreen[y * m_nScreenWidth + x + i].UnicodeChar = c[i];
+                    m_bufScreen[y * m_nScreenWidth + x + i].Attributes = (ushort)col;
+                }
             }
         }
 
@@ -218,6 +233,64 @@ namespace ConsoleGameEngine
                         py = py + 2 * (dx1 - dy1);
                     }
                     Draw(x, y, pixel, col);
+                }
+            }
+        }
+
+        public void DrawTriangle(int x1, int y1, int x2, int y2, int x3, int y3, PIXEL_TYPE pixel = PIXEL_TYPE.PIXEL_SOLID, COLOR col = COLOR.FG_WHITE)
+        {
+            DrawLine(x1, y1, x2, y2, pixel, col);
+            DrawLine(x2, y2, x3, y3, pixel, col);
+            DrawLine(x3, y3, x1, y1, pixel, col);
+        }
+
+        public void DrawCircle(int xc, int yc, int r, PIXEL_TYPE pixel = PIXEL_TYPE.PIXEL_SOLID, COLOR col = COLOR.FG_WHITE)
+        {
+            int x = 0;
+            int y = r;
+            int p = 3 - 2 * r;
+            if (r == 0) return;
+
+            while (y >= x) // only formulate 1/8 of circle
+            {
+                Draw(xc - x, yc - y, pixel, col);//upper left left
+                Draw(xc - y, yc - x, pixel, col);//upper upper left
+                Draw(xc + y, yc - x, pixel, col);//upper upper right
+                Draw(xc + x, yc - y, pixel, col);//upper right right
+                Draw(xc - x, yc + y, pixel, col);//lower left left
+                Draw(xc - y, yc + x, pixel, col);//lower lower left
+                Draw(xc + y, yc + x, pixel, col);//lower lower right
+                Draw(xc + x, yc + y, pixel, col);//lower right right
+                if (p < 0) p += 4 * x++ + 6;
+                else p += 4 * (x++ - y--) + 10;
+            }
+        }
+
+        public void DrawSprite(int x, int y, olcSprite sprite)
+        {
+            if (sprite == null) return;
+
+            for (int i = 0; i < sprite.nWidth; i++)
+            {
+                for (int j = 0; j < sprite.nHeight; j++)
+                {
+                    if (sprite.GetGlyph(i, j) != ' ')
+                        Draw(x + i, y + j, sprite.GetGlyph(i, j), sprite.getColor(i, j));
+                }
+            }
+        }
+
+        public void DrawPartialSprite(int x, int y, olcSprite sprite, int ox, int oy, int w, int h)
+        {
+            if (sprite == null)
+                return;
+
+            for (int i = 0; i < w; i++)
+            {
+                for (int j = 0; j < h; j++)
+                {
+                    if (sprite.GetGlyph(i + ox, j + oy) != ' ')
+                        Draw(x + i, y + j, sprite.GetGlyph(i + ox, j + oy), sprite.getColor(i + ox, j + oy));
                 }
             }
         }
@@ -343,6 +416,8 @@ namespace ConsoleGameEngine
         #region PImports
 
         #region Kernel32
+
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfoEx(IntPtr hConsoleOutput, ref CONSOLE_SCREEN_BUFFER_INFO_EX ConsoleScreenBufferInfo);
         [DllImport("kernel32.dll", EntryPoint = "ReadConsoleInputW", CharSet = CharSet.Unicode)] static extern bool ReadConsoleInput(IntPtr hConsoleInput, [Out] INPUT_RECORD[] lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
 
         [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetNumberOfConsoleInputEvents(IntPtr hConsoleInput, out uint lpcNumberOfEvents);
@@ -360,6 +435,51 @@ namespace ConsoleGameEngine
         [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vKey);
 
         #region User-Defined Types
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CONSOLE_SCREEN_BUFFER_INFO_EX
+        {
+            public uint cbSize;
+            public COORD dwSize;
+            public COORD dwCursorPosition;
+            public short wAttributes;
+            public SMALL_RECT srWindow;
+            public COORD dwMaximumWindowSize;
+
+            public ushort wPopupAttributes;
+            public bool bFullscreenSupported;
+
+            private COLORREF black;
+            private COLORREF darkBlue;
+            private COLORREF darkGreen;
+            private COLORREF darkCyan;
+            private COLORREF darkRed;
+            private COLORREF darkMagenta;
+            private COLORREF darkYellow;
+            private COLORREF gray;
+            private COLORREF darkGray;
+            private COLORREF blue;
+            private COLORREF green;
+            private COLORREF cyan;
+            private COLORREF red;
+            private COLORREF magenta;
+            private COLORREF yellow;
+            private COLORREF white;
+
+            // has been a while since I did this, test before use
+            // but should be something like:
+            //
+            // [MarshalAs(UnmanagedType.ByValArray, SizeConst=16)]
+            // public COLORREF[] ColorTable;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct COLORREF
+        {
+            public byte R;
+            public byte G;
+            public byte B;
+        }
 
         #region Records
 
