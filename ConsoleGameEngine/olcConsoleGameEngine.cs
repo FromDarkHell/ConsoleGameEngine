@@ -48,28 +48,11 @@ namespace ConsoleGameEngine
 
             m_nScreenHeight = height;
             m_nScreenWidth = width;
-            CONSOLE_FONT_INFOEX cfi;
-            cfi.cbSize = (uint)Marshal.SizeOf<CONSOLE_FONT_INFOEX>();
-            cfi.nFont = 0;
-            cfi.dwFontSize.X = fontw;
-            cfi.dwFontSize.Y = fonth;
-            cfi.FontFamily = 0;
-            cfi.FontWeight = 400;
-            cfi.FaceName = "Liberation Mono";
-            if (!SetCurrentConsoleFontEx(m_hConsole, false, cfi))
-                throw new Exception("SetCurrentConsoleFontEx");
-
-            COORD coordLargest = GetLargestConsoleWindowSize(m_hConsole);
-
-            if (height > coordLargest.Y)
-                throw new Exception("Screen Height / Font Height Too Big");
-            if (width > coordLargest.X)
-                throw new Exception("Screen Width / Font Width Too Big");
 
             m_rectWindow.Left = 0;
             m_rectWindow.Top = 0;
-            m_rectWindow.Right = (short)(m_nScreenWidth - 1);
-            m_rectWindow.Bottom = (short)(m_nScreenHeight - 1);
+            m_rectWindow.Right = 1;
+            m_rectWindow.Bottom = 1;
 
             if (!SetConsoleWindowInfo(m_hConsole, true, ref m_rectWindow))
                 throw new Exception("SetConsoleWindowInfo");
@@ -80,6 +63,38 @@ namespace ConsoleGameEngine
 
             if (!SetConsoleScreenBufferSize(m_hConsole, buffer))
                 throw new Exception("SetConsoleScreenBufferSize");
+
+            // Assign screen buffer to the console
+            if (!SetConsoleActiveScreenBuffer(m_hConsole))
+                throw new Exception("SetConsoleActiveScreenBuffer");
+
+
+            CONSOLE_FONT_INFOEX cfi;
+            cfi.cbSize = (uint)Marshal.SizeOf<CONSOLE_FONT_INFOEX>();
+            cfi.nFont = 0;
+            cfi.dwFontSize.X = fontw;
+            cfi.dwFontSize.Y = fonth;
+            cfi.FontFamily = 0;
+            cfi.FontWeight = 400;
+            cfi.FaceName = "Consolas";
+            if (!SetCurrentConsoleFontEx(m_hConsole, false, cfi))
+                throw new Exception("SetCurrentConsoleFontEx");
+
+
+            COORD coordLargest = GetLargestConsoleWindowSize(m_hConsole);
+
+            if (height > coordLargest.Y)
+                throw new Exception("Screen Height / Font Height Too Big | SCR: " + height + " | LRG: " + coordLargest.Y);
+            if (width > coordLargest.X)
+                throw new Exception("Screen Width / Font Width Too Big | SCR: " + width + " | LRG: " + coordLargest.X);
+
+            m_rectWindow.Left = 0;
+            m_rectWindow.Top = 0;
+            m_rectWindow.Right = (short)(m_nScreenWidth - 1);
+            m_rectWindow.Bottom = (short)(m_nScreenHeight - 1);
+
+            if (!SetConsoleWindowInfo(m_hConsole, true, ref m_rectWindow))
+                throw new Exception("SetConsoleWindowInfo");
 
             uint args = (uint)(ConsoleModes.ENABLE_EXTENDED_FLAGS | ConsoleModes.ENABLE_WINDOW_INPUT | ConsoleModes.ENABLE_MOUSE_INPUT);
             if (!SetConsoleMode(m_hConsoleIn, args))
@@ -416,6 +431,9 @@ namespace ConsoleGameEngine
         #region PImports
 
         #region Kernel32
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleActiveScreenBuffer(IntPtr hConsoleOutput);
 
         [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfoEx(IntPtr hConsoleOutput, ref CONSOLE_SCREEN_BUFFER_INFO_EX ConsoleScreenBufferInfo);
         [DllImport("kernel32.dll", EntryPoint = "ReadConsoleInputW", CharSet = CharSet.Unicode)] static extern bool ReadConsoleInput(IntPtr hConsoleInput, [Out] INPUT_RECORD[] lpBuffer, uint nLength, out uint lpNumberOfEventsRead);

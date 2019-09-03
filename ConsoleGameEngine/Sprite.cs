@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-
+using System.Text;
 
 namespace ConsoleGameEngine
 {
@@ -86,8 +86,8 @@ namespace ConsoleGameEngine
 
         #region Creation
 
-        private char[] m_Glyphs;
-        private COLOR[] m_Colours;
+        public char[] m_Glyphs;
+        public COLOR[] m_Colours;
 
         private void Create(int w, int h)
         {
@@ -164,17 +164,17 @@ namespace ConsoleGameEngine
 
         public bool Save(string sFile)
         {
-            List<string> spriteContent = new List<string>();
-            spriteContent.Add(nWidth.ToString() + "\n");
-            spriteContent.Add(nHeight.ToString() + "\n");
-            spriteContent.Add("--COLORS--" + "\n");
-            foreach (COLOR color in m_Colours)
-                spriteContent.Add(((short)color).ToString() + "\n");
-            spriteContent.Add("--GLYPHS--" + "\n");
-            foreach (char glyph in m_Glyphs)
-                spriteContent.Add(glyph.ToString() + "\n");
-            File.WriteAllLines(sFile, spriteContent);
+            using (BinaryWriter w = new BinaryWriter(File.Open(sFile, FileMode.CreateNew), Encoding.Unicode))
+            {
+                w.Write(nWidth);
+                w.Write(nHeight);
 
+                List<short> types = new List<short>();
+                foreach (COLOR c in m_Colours) types.Add((short)c);
+                foreach (short type in types)
+                    w.Write(type);
+                w.Write(m_Glyphs);
+            }
             return true;
         }
 
@@ -185,33 +185,23 @@ namespace ConsoleGameEngine
             nWidth = 0;
             nHeight = 0;
 
-            string[] fileData = File.ReadAllLines(sFile);
-            if (fileData == null || fileData.Length == 0)
-                return false;
-
-            nWidth = int.Parse(fileData[0]);
-            nHeight = int.Parse(fileData[1]);
-            Create(nWidth, nHeight);
-            List<COLOR> colors = new List<COLOR>();
-            List<char> glyphs = new List<char>();
-
-            string lastSegment = "";
-            foreach (string fileLine in fileData)
+            using (BinaryReader r = new BinaryReader(File.Open(sFile, FileMode.Open), Encoding.Unicode))
             {
-                if (lastSegment == "--COLORS--")
+
+                nWidth = r.ReadInt32();
+                nHeight = r.ReadInt32();
+
+                Create(nWidth, nHeight);
+                int colorIndex = 0;
+                while (colorIndex < nWidth * nHeight)
                 {
-                    colors.Add((COLOR)Enum.Parse(typeof(COLOR), fileLine));
+                    m_Colours[colorIndex] = (COLOR)r.Read();
+                    colorIndex++;
                 }
-                else if (lastSegment == "--GLYPHS--")
-                {
-                    glyphs.Add(char.Parse(fileLine));
-                }
-                if (fileLine.Contains("--"))
-                    lastSegment = fileLine;
+                int pos = (int)(r.BaseStream.Length - r.BaseStream.Position);
+                m_Glyphs = r.ReadChars(pos);
             }
 
-            m_Colours = colors.ToArray();
-            m_Glyphs = glyphs.ToArray();
             return true;
         }
 

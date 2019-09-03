@@ -43,9 +43,19 @@ namespace Demo
 
         public class FPSDemo : olcConsoleGameEngine
         {
+            public struct sObject
+            {
+                public float x;
+                public float y;
+                public float vx;
+                public float vy;
+                public bool bRemove;
+                public olcSprite sprite;
+            };
+
             private static readonly int mapW = 32;
             private static readonly int mapH = 32;
-            private static readonly int depth = 64;
+            private static readonly int depth = 16;
             private static readonly double fov = Math.PI / 4.0;
 
             // The default X value of the player  
@@ -55,8 +65,8 @@ namespace Demo
 
             static double playerA = 0.0d;
 
-            static double fSpeed = 1.25f;
-            static double sprintModifier = 1.00f;
+            static double fSpeed = 5.25f;
+            static double sprintModifier = 2.00f;
 
             string[] mapString;
             char[] map;
@@ -66,8 +76,19 @@ namespace Demo
 
             private static double lastMouseX, lastMouseY = 0;
 
+            static olcSprite spriteWall = new olcSprite(Environment.CurrentDirectory + "\\FPSSprites\\fps_wall1.spr");
+            static olcSprite spriteLamp = new olcSprite(Environment.CurrentDirectory + "\\FPSSprites\\fps_lamp1.spr");
+            static olcSprite spriteFireball = new olcSprite(Environment.CurrentDirectory + "\\FPSSprites\\fps_fireball1.spr");
+
+            double[] fDepthBuffer;
+
+            List<sObject> listObjects = new List<sObject>();
             public override bool OnUserCreate()
             {
+                listObjects.Add(new sObject() { x = 8.5f, y = 8.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 7.5f, y = 7.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 10.5f, y = 3.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
+
                 mapString = new string[]
                 {
                     "#########.......#########.......",
@@ -115,7 +136,7 @@ namespace Demo
                         index++;
                     }
                 }
-
+                fDepthBuffer = new double[ScreenWidth()];
                 return true;
             }
 
@@ -192,6 +213,18 @@ namespace Demo
 
                 #endregion
 
+                if (isKeyPushedDown(Keys.Space) || m_mouse[0].bPressed)
+                {
+                    sObject o;
+                    o.x = (float)playerX;
+                    o.y = (float)playerX;
+                    float fNoise = (((float)new Random().Next() / (float)32767) - 0.5f) * 0.1f;
+                    o.vx = (float)Math.Sin(playerA + fNoise) * 8.0f;
+                    o.vy = (float)Math.Cos(playerA + fNoise) * 8.0f;
+                    o.sprite = spriteFireball;
+                    o.bRemove = false;
+                    listObjects.Add(o);
+                }
 
                 #endregion
 
@@ -208,12 +241,16 @@ namespace Demo
                     double eyeY = Math.Cos(rayAngle);
 
                     // The distance to a wall, obviously...
+                    float fStepSize = 0.01f;
                     double distanceToWall = 0;
 
                     // If we've hit a wall... Pretty obvious huh.
                     bool hitWall = false;
                     // A variable to help do some visibility stuff, if its the edge of a cell
                     bool edgeOfCell = false;
+
+                    bool bLit = false;
+                    double fSampleX = 0.0d;
 
                     // Saw an enemy
                     bool hitEnemy = false;
@@ -242,35 +279,20 @@ namespace Demo
                                 // Make sure we hit a wall
                                 hitWall = true;
 
-                                #region Distance / Dot Formula for extra shading
-                                List<Tuple<double, double>> p = new List<Tuple<double, double>>(); // Distance, Dot formula
+                                // Determine where ray has hit wall. Break Block boundary
+                                // int 4 line segments
+                                double fBlockMidX = testX + 0.5f;
+                                double fBlockMidY = testY + 0.5f;
 
-                                for (int tx = 0; tx < 2; tx++)
-                                {
-                                    for (int ty = 0; ty < 2; ty++)
-                                    {
-                                        double vy = (float)testY + ty - playerY;
-                                        double vx = (float)testX + tx - playerX;
+                                double fTestPointX = (playerX + eyeX * distanceToWall);
+                                double fTestPointY = (playerY + eyeY * distanceToWall);
 
-                                        double d = Math.Sqrt(vx * vx + vy * vy);
-                                        double dot = (eyeX * vx / d) + (eyeY * vy / d);
-                                        p.Add(new Tuple<double, double>(d, dot));
-                                    }
-                                }
-                                p.Sort((a, b) => b.Item1.CompareTo(a.Item1));
+                                double fTestAngle = Math.Atan2((fTestPointY - fBlockMidY), (fTestPointX - fBlockMidX));
 
-                                double bound = 0.01d;
-
-                                if (Math.Acos(p.ElementAt(0).Item2) < bound) edgeOfCell = true;
-                                if (Math.Acos(p.ElementAt(1).Item2) < bound) edgeOfCell = true;
-                                #endregion
-
-                            }
-
-                            if (map[testY * mapW + testX] == 'e')
-                            {
-                                hitEnemy = true;
-                                edgeOfCell = false;
+                                if (fTestAngle >= -3.14159f * 0.25f && fTestAngle < 3.14159f * 0.25f) fSampleX = fTestPointY - testY;
+                                if (fTestAngle >= 3.14159f * 0.25f && fTestAngle < 3.14159f * 0.75f) fSampleX = fTestPointX - testX;
+                                if (fTestAngle < -3.14159f * 0.25f && fTestAngle >= -3.14159f * 0.75f) fSampleX = fTestPointX - testX;
+                                if (fTestAngle >= 3.14159f * 0.75f || fTestAngle < -3.14159f * 0.75f) fSampleX = fTestPointY - testY;
                             }
                         }
                     }
@@ -289,54 +311,110 @@ namespace Demo
                     if (edgeOfCell) shade = '#';
                     if (hitEnemy) shade = '!';
 
+                    fDepthBuffer[x] = distanceToWall;
+
                     for (int y = 0; y < ScreenHeight(); y++)
                     {
-                        // A ceiling
-                        if (y < ceiling) Draw(x, y, PIXEL_TYPE.PIXEL_QUARTER, COLOR.FG_BLACK);
-                        // A wall
-                        else if (y >= ceiling && y <= floor)
-                            if (edgeOfCell)
-                                Draw(x, y, '#', COLOR.FG_DARK_GREY);
+                        // Each Row
+                        if (y <= ceiling)
+                            Draw(x, y, ' ');
+                        else if (y > ceiling && y <= floor)
+                        {
+                            // Draw Wall
+                            if (distanceToWall < depth)
+                            {
+                                float fSampleY = ((float)y - (float)ceiling) / ((float)floor - (float)ceiling);
+                                Draw(x, y, spriteWall.SampleGlyph((float)fSampleX, fSampleY), spriteWall.SampleColor((float)fSampleX, fSampleY));
+                            }
                             else
-                                Draw(x, y, shade, (y != ceiling) ? COLOR.FG_DARK_RED : COLOR.FG_GREY);
-                        // The floor
-                        else
+                                Draw(x, y, PIXEL_TYPE.PIXEL_SOLID, 0);
+                        }
+                        else // Floor
                         {
-
-                            float b = 1.0f - ((y - ScreenHeight() / 2.0f) / (ScreenHeight() / 2.0f));
-                            if (b < 0.25) shade = '#';
-                            else if (b < 0.5) shade = 'x';
-                            else if (b < 0.75) shade = '-';
-                            else if (b < 0.9) shade = '.';
-                            Draw(x, y, shade, COLOR.FG_DARK_GREEN);
+                            Draw(x, y, PIXEL_TYPE.PIXEL_SOLID, COLOR.FG_DARK_GREEN);
                         }
 
                     }
-
-                    string stats = String.Format("X={0:0.00}, Y={1:0.00}, A={2:0.00}, SP: {3:0.00}, mX: {4:0.00}, oX: {5:0.00}, dX: {6:0.00}",
-                    playerX, playerY, playerA, fSpeed, m_mousePosX, lastMouseX, m_mousePosX - lastMouseX);
-                    DrawString(0, 0, stats);
-
-                    if (showMinimap)
+                    for (int i = 0; i < listObjects.ToArray().Length; i++)
                     {
-                        int mapX = 0;
-                        int mapY = 2;
-                        foreach (string mapLine in mapString)
+                        sObject obj = listObjects[i];
+
+                        // Update obj Physics
+                        obj.x += obj.vx * elapsed;
+                        obj.y += obj.vy * elapsed;
+
+                        // Check if obj is inside wall - set flag for removal
+                        if (map[(int)obj.x * mapW + (int)obj.y] == '#')
+                            obj.bRemove = true;
+
+                        // Can obj be seen?
+                        double fVecX = obj.x - playerX;
+                        double fVecY = obj.y - playerY;
+                        double fDistanceFromPlayer = Math.Sqrt(fVecX * fVecX + fVecY * fVecY);
+
+                        double fEyeX = Math.Sin(playerA);
+                        double fEyeY = Math.Cos(playerA);
+
+                        // Calculate angle between lamp and players feet, and players looking direction
+                        // to determine if the lamp is in the players field of view
+                        double fobjAngle = Math.Atan2(fEyeY, fEyeX) - Math.Atan2(fVecY, fVecX);
+                        if (fobjAngle < -3.14159f)
+                            fobjAngle += 2.0f * 3.14159f;
+                        if (fobjAngle > 3.14159f)
+                            fobjAngle -= 2.0f * 3.14159f;
+                        bool bInPlayerFOV = Math.Abs(fobjAngle) < fov / 2.0f;
+
+                        if (bInPlayerFOV && fDistanceFromPlayer >= 0.5f && fDistanceFromPlayer < depth && !obj.bRemove)
                         {
-                            DrawString(mapX, mapY, mapLine);
-                            mapY += 1;
+                            double fObjectCeiling = (ScreenHeight() / 2.0) - ScreenHeight() / (fDistanceFromPlayer);
+                            double fObjectFloor = ScreenHeight() - fObjectCeiling;
+                            double fObjectHeight = fObjectFloor - fObjectCeiling;
+                            double fObjectAspectRatio = obj.sprite.nHeight / obj.sprite.nWidth;
+                            double fObjectWidth = fObjectHeight / fObjectAspectRatio;
+                            double fMiddleOfObject = (0.5f * (fobjAngle / (fov / 2.0f)) + 0.5f) * ScreenWidth();
+
+                            // Draw Lamp
+                            for (double lx = 0; lx < fObjectWidth; lx++)
+                            {
+                                for (double ly = 0; ly < fObjectHeight; ly++)
+                                {
+                                    double floatSampleX = lx / fObjectWidth;
+                                    double floatSampleY = ly / fObjectHeight;
+
+                                    char c = obj.sprite.SampleGlyph((float)floatSampleX, (float)floatSampleY);
+                                    int objectColumn = (int)(fMiddleOfObject + lx - (fObjectWidth / 2.0f));
+                                    if (objectColumn >= 0 && objectColumn < ScreenWidth())
+                                    {
+                                        if (c != ' ' && fDepthBuffer[objectColumn] >= fDistanceFromPlayer)
+                                        {
+                                            Draw(objectColumn, fObjectCeiling + ly, c, obj.sprite.SampleColor((float)floatSampleX, (float)floatSampleY));
+                                            fDepthBuffer[objectColumn] = fDistanceFromPlayer;
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        char rotatedChar = 'p';
-                        m_bufScreen[((int)playerY + 2) * ScreenWidth() + (int)playerX].UnicodeChar = rotatedChar;
                     }
-                    #endregion
                 }
+                string stats = String.Format("X={0:0.00}, Y={1:0.00}, A={2:0.00}, SP: {3:0.00}, mX: {4:0.00}, oX: {5:0.00}, dX: {6:0.00}",
+                playerX, playerY, playerA, fSpeed, m_mousePosX, lastMouseX, m_mousePosX - lastMouseX);
+                DrawString(0, 0, stats);
+
+                if (showMinimap)
+                {
+                    // Display Map & Player
+                    for (int nx = 0; nx < mapW; nx++)
+                        for (int ny = 0; ny < mapW; ny++)
+                            Draw(nx + 1, ny + 1, map[ny * mapW + nx]);
+                    Draw(1 + (int)playerY, 1 + (int)playerX, 'P');
+                }
+                #endregion
 
                 #endregion
 
                 if (m_mousePosX != lastMouseX) lastMouseX = m_mousePosX;
                 if (m_mousePosY != lastMouseY) lastMouseY = m_mousePosY;
-
+                listObjects.RemoveAll(x => x.bRemove);
                 return bIsPlayingGame;
             }
 
@@ -349,7 +427,8 @@ namespace Demo
         static void Main(string[] args)
         {
             var game = new FPSDemo();
-            game.ConstructConsole(200, 120, 8, 8);
+            //game.ConstructConsole(200, 120, 8, 8);
+            game.ConstructConsole(168, 64, 16, 16);
             game.Start();
         }
     }
