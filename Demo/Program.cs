@@ -43,6 +43,12 @@ namespace Demo
 
         public class FPSDemo : olcConsoleGameEngine
         {
+            public enum spriteType
+            {
+                TYPE_PROJECTILE = 0x00,
+                TYPE_OBJECT = 0x01
+            }
+
             public struct sObject
             {
                 public float x;
@@ -50,12 +56,13 @@ namespace Demo
                 public float vx;
                 public float vy;
                 public bool bRemove;
+                public spriteType spriteType;
                 public olcSprite sprite;
             };
 
             private static readonly int mapW = 32;
             private static readonly int mapH = 32;
-            private static readonly int depth = 16;
+            private static readonly int depth = 32;
             private static readonly double fov = Math.PI / 4.0;
 
             // The default X value of the player  
@@ -65,14 +72,15 @@ namespace Demo
 
             static double playerA = 0.0d;
 
-            static double fSpeed = 5.25f;
-            static double sprintModifier = 2.00f;
+            static double fSpeed = 4.25f;
+            static double sprintModifier = 1.00f;
 
             string[] mapString;
             char[] map;
 
             private static bool showMinimap = true;
             private static bool bIsPlayingGame = true;
+            private static bool bEnableFog = true;
 
             private static double lastMouseX, lastMouseY = 0;
 
@@ -85,9 +93,10 @@ namespace Demo
             List<sObject> listObjects = new List<sObject>();
             public override bool OnUserCreate()
             {
-                listObjects.Add(new sObject() { x = 8.5f, y = 8.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
-                listObjects.Add(new sObject() { x = 7.5f, y = 7.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
-                listObjects.Add(new sObject() { x = 10.5f, y = 3.5f, vx = 0.0f, vy = 0.0f, bRemove = false, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 8.5f, y = 8.5f, vx = 0.0f, vy = 0.0f, bRemove = false, spriteType = spriteType.TYPE_OBJECT, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 7.5f, y = 7.5f, vx = 0.0f, vy = 0.0f, bRemove = false, spriteType = spriteType.TYPE_OBJECT, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 10.5f, y = 3.5f, vx = 0.0f, vy = 0.0f, bRemove = false, spriteType = spriteType.TYPE_OBJECT, sprite = spriteLamp });
+                listObjects.Add(new sObject() { x = 3f, y = 13f, vx = 0.0f, vy = 0.0f, bRemove = false, spriteType = spriteType.TYPE_OBJECT, sprite = spriteLamp });
 
                 mapString = new string[]
                 {
@@ -213,16 +222,17 @@ namespace Demo
 
                 #endregion
 
-                if (isKeyPushedDown(Keys.Space) || m_mouse[0].bPressed)
+                if (isKeyPushedDown(Keys.Space) || m_mouse[0].bHeld)
                 {
                     sObject o;
                     o.x = (float)playerX;
-                    o.y = (float)playerX;
-                    float fNoise = (((float)new Random().Next() / (float)32767) - 0.5f) * 0.1f;
-                    o.vx = (float)Math.Sin(playerA + fNoise) * 8.0f;
-                    o.vy = (float)Math.Cos(playerA + fNoise) * 8.0f;
+                    o.y = (float)playerY;
+                    float noise = (((new Random().Next()) - 0.5f) / int.MaxValue);
+                    o.vx = (float)Math.Sin(playerA);
+                    o.vy = (float)Math.Cos(playerA);
                     o.sprite = spriteFireball;
                     o.bRemove = false;
+                    o.spriteType = spriteType.TYPE_PROJECTILE;
                     listObjects.Add(o);
                 }
 
@@ -241,15 +251,11 @@ namespace Demo
                     double eyeY = Math.Cos(rayAngle);
 
                     // The distance to a wall, obviously...
-                    float fStepSize = 0.01f;
                     double distanceToWall = 0;
 
                     // If we've hit a wall... Pretty obvious huh.
                     bool hitWall = false;
-                    // A variable to help do some visibility stuff, if its the edge of a cell
-                    bool edgeOfCell = false;
 
-                    bool bLit = false;
                     double fSampleX = 0.0d;
 
                     // Saw an enemy
@@ -302,22 +308,15 @@ namespace Demo
                     // The floor... duh.
                     int floor = ScreenHeight() - ceiling;
 
-                    char shade = ' ';
-                    if (distanceToWall <= depth / 4.0d) shade = (char)PIXEL_TYPE.PIXEL_SOLID;
-                    else if (distanceToWall <= depth / 3.0d) shade = (char)PIXEL_TYPE.PIXEL_THREEQUARTERS;
-                    else if (distanceToWall <= depth / 2.0d) shade = (char)PIXEL_TYPE.PIXEL_HALF;
-                    else if (distanceToWall <= depth) shade = (char)PIXEL_TYPE.PIXEL_QUARTER;
-
-                    if (edgeOfCell) shade = '#';
-                    if (hitEnemy) shade = '!';
-
                     fDepthBuffer[x] = distanceToWall;
 
                     for (int y = 0; y < ScreenHeight(); y++)
                     {
                         // Each Row
                         if (y <= ceiling)
-                            Draw(x, y, ' ');
+                        {
+                            Draw(x, y, '.', COLOR.FG_BLUE);
+                        }
                         else if (y > ceiling && y <= floor)
                         {
                             // Draw Wall
@@ -327,7 +326,7 @@ namespace Demo
                                 Draw(x, y, spriteWall.SampleGlyph((float)fSampleX, fSampleY), spriteWall.SampleColor((float)fSampleX, fSampleY));
                             }
                             else
-                                Draw(x, y, PIXEL_TYPE.PIXEL_SOLID, 0);
+                                Draw(x, y, PIXEL_TYPE.PIXEL_SOLID, COLOR.FG_BLACK);
                         }
                         else // Floor
                         {
@@ -335,69 +334,95 @@ namespace Demo
                         }
 
                     }
-                    for (int i = 0; i < listObjects.ToArray().Length; i++)
+
+
+                }
+
+                for (int i = 0; i < listObjects.Count; i++)
+                {
+                    sObject obj = listObjects[i];
+                    // Update obj Physics
+                    obj.x += (obj.vx);
+                    obj.y += (obj.vy);
+                    try
                     {
-                        sObject obj = listObjects[i];
-
-                        // Update obj Physics
-                        obj.x += obj.vx * elapsed;
-                        obj.y += obj.vy * elapsed;
-
                         // Check if obj is inside wall - set flag for removal
                         if (map[(int)obj.x * mapW + (int)obj.y] == '#')
                             obj.bRemove = true;
-
-                        // Can obj be seen?
-                        double fVecX = obj.x - playerX;
-                        double fVecY = obj.y - playerY;
-                        double fDistanceFromPlayer = Math.Sqrt(fVecX * fVecX + fVecY * fVecY);
-
-                        double fEyeX = Math.Sin(playerA);
-                        double fEyeY = Math.Cos(playerA);
-
-                        // Calculate angle between lamp and players feet, and players looking direction
-                        // to determine if the lamp is in the players field of view
-                        double fobjAngle = Math.Atan2(fEyeY, fEyeX) - Math.Atan2(fVecY, fVecX);
-                        if (fobjAngle < -3.14159f)
-                            fobjAngle += 2.0f * 3.14159f;
-                        if (fobjAngle > 3.14159f)
-                            fobjAngle -= 2.0f * 3.14159f;
-                        bool bInPlayerFOV = Math.Abs(fobjAngle) < fov / 2.0f;
-
-                        if (bInPlayerFOV && fDistanceFromPlayer >= 0.5f && fDistanceFromPlayer < depth && !obj.bRemove)
+                        if (obj.spriteType == spriteType.TYPE_PROJECTILE)
                         {
-                            double fObjectCeiling = (ScreenHeight() / 2.0) - ScreenHeight() / (fDistanceFromPlayer);
-                            double fObjectFloor = ScreenHeight() - fObjectCeiling;
-                            double fObjectHeight = fObjectFloor - fObjectCeiling;
-                            double fObjectAspectRatio = obj.sprite.nHeight / obj.sprite.nWidth;
-                            double fObjectWidth = fObjectHeight / fObjectAspectRatio;
-                            double fMiddleOfObject = (0.5f * (fobjAngle / (fov / 2.0f)) + 0.5f) * ScreenWidth();
-
-                            // Draw Lamp
-                            for (double lx = 0; lx < fObjectWidth; lx++)
+                            for (int o = 0; o < listObjects.Count; o++)
                             {
-                                for (double ly = 0; ly < fObjectHeight; ly++)
-                                {
-                                    double floatSampleX = lx / fObjectWidth;
-                                    double floatSampleY = ly / fObjectHeight;
+                                sObject sObj = listObjects[o];
+                                double dVecX = obj.x - sObj.x;
+                                double dVecY = obj.y - sObj.y;
+                                double dDistanceFromObj = Math.Sqrt(dVecX * dVecX + dVecY * dVecY);
+                                if (dDistanceFromObj > -1 && dDistanceFromObj < 0.6)
+                                    obj.bRemove = true;
+                            }
+                        }
+                    }
+                    catch (Exception) { obj.bRemove = true; }
 
-                                    char c = obj.sprite.SampleGlyph((float)floatSampleX, (float)floatSampleY);
-                                    int objectColumn = (int)(fMiddleOfObject + lx - (fObjectWidth / 2.0f));
-                                    if (objectColumn >= 0 && objectColumn < ScreenWidth())
+                    // Can obj be seen?
+                    double fVecX = obj.x - playerX;
+                    double fVecY = obj.y - playerY;
+                    double fDistanceFromPlayer = Math.Sqrt(fVecX * fVecX + fVecY * fVecY);
+
+                    double fEyeX = Math.Sin(playerA);
+                    double fEyeY = Math.Cos(playerA);
+
+                    // Calculate angle between lamp and players feet, and players looking direction
+                    // to determine if the lamp is in the players field of view
+                    double fobjAngle = Math.Atan2(fEyeY, fEyeX) - Math.Atan2(fVecY, fVecX);
+                    if (fobjAngle < -3.14159f) fobjAngle += 2.0f * 3.14159f;
+                    if (fobjAngle > 3.14159f) fobjAngle -= 2.0f * 3.14159f;
+                    bool bInPlayerFOV = Math.Abs(fobjAngle) < fov / 2.0f;
+
+                    if (bInPlayerFOV && fDistanceFromPlayer >= 0.5f && fDistanceFromPlayer < depth && !obj.bRemove)
+                    {
+                        double fObjectCeiling = (ScreenHeight() / 2.0) - ScreenHeight() / (fDistanceFromPlayer);
+                        double fObjectFloor = ScreenHeight() - fObjectCeiling;
+                        double fObjectHeight = fObjectFloor - fObjectCeiling;
+                        double fObjectAspectRatio = obj.sprite.nHeight / obj.sprite.nWidth;
+                        double fObjectWidth = fObjectHeight / fObjectAspectRatio;
+                        double fMiddleOfObject = (0.5f * (fobjAngle / (fov / 2.0f)) + 0.5f) * ScreenWidth();
+
+                        // Draw Lamps / other objects
+                        for (double lx = 0; lx < fObjectWidth; lx++)
+                        {
+                            for (double ly = 0; ly < fObjectHeight; ly++)
+                            {
+                                double floatSampleX = lx / fObjectWidth;
+                                double floatSampleY = ly / fObjectHeight;
+
+                                char c = obj.sprite.SampleGlyph((float)floatSampleX, (float)floatSampleY);
+                                int objectColumn = (int)(fMiddleOfObject + lx - (fObjectWidth / 2.0f));
+                                if (objectColumn >= 0 && objectColumn < ScreenWidth())
+                                {
+                                    if (c != ' ' && fDepthBuffer[objectColumn] >= fDistanceFromPlayer)
                                     {
-                                        if (c != ' ' && fDepthBuffer[objectColumn] >= fDistanceFromPlayer)
-                                        {
-                                            Draw(objectColumn, fObjectCeiling + ly, c, obj.sprite.SampleColor((float)floatSampleX, (float)floatSampleY));
-                                            fDepthBuffer[objectColumn] = fDistanceFromPlayer;
-                                        }
+                                        Draw(objectColumn, fObjectCeiling + ly, c, obj.sprite.SampleColor((float)floatSampleX, (float)floatSampleY));
+                                        fDepthBuffer[objectColumn] = fDistanceFromPlayer;
                                     }
                                 }
                             }
                         }
                     }
+
+                    if (obj.spriteType == spriteType.TYPE_OBJECT && fDistanceFromPlayer > -1 && fDistanceFromPlayer < 0.6)
+                    {
+                        playerX = frmX;
+                        playerY = frmY;
+                    }
+
+                    listObjects[i] = obj;
                 }
-                string stats = String.Format("X={0:0.00}, Y={1:0.00}, A={2:0.00}, SP: {3:0.00}, mX: {4:0.00}, oX: {5:0.00}, dX: {6:0.00}",
-                playerX, playerY, playerA, fSpeed, m_mousePosX, lastMouseX, m_mousePosX - lastMouseX);
+
+                listObjects = listObjects.Where(obj => !obj.bRemove).ToList();
+
+                string stats = String.Format("X={0:0.00}, Y={1:0.00}, A={2:0.00}, SP: {3:0.00}, mX: {4:0.00}, oX: {5:0.00}, dX: {6:0.00}, #obj: {7}",
+                playerX, playerY, playerA, fSpeed, m_mousePosX, lastMouseX, m_mousePosX - lastMouseX, listObjects.Count);
                 DrawString(0, 0, stats);
 
                 if (showMinimap)
@@ -414,7 +439,7 @@ namespace Demo
 
                 if (m_mousePosX != lastMouseX) lastMouseX = m_mousePosX;
                 if (m_mousePosY != lastMouseY) lastMouseY = m_mousePosY;
-                listObjects.RemoveAll(x => x.bRemove);
+
                 return bIsPlayingGame;
             }
 
@@ -427,8 +452,7 @@ namespace Demo
         static void Main(string[] args)
         {
             var game = new FPSDemo();
-            //game.ConstructConsole(200, 120, 8, 8);
-            game.ConstructConsole(168, 64, 16, 16);
+            game.ConstructConsole(400, 151, 4, 6);
             game.Start();
         }
     }

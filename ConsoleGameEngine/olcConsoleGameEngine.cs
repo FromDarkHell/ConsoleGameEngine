@@ -76,7 +76,7 @@ namespace ConsoleGameEngine
             cfi.dwFontSize.Y = fonth;
             cfi.FontFamily = 0;
             cfi.FontWeight = 400;
-            cfi.FaceName = "Consolas";
+            cfi.FaceName = "Raster";
             if (!SetCurrentConsoleFontEx(m_hConsole, false, cfi))
                 throw new Exception("SetCurrentConsoleFontEx");
 
@@ -327,15 +327,13 @@ namespace ConsoleGameEngine
             if (!OnUserCreate())
                 return;
 
-            var t1 = DateTimeOffset.Now;
-            var t2 = DateTimeOffset.Now;
+            var tp1 = DateTime.Now.Millisecond;
+            var tp2 = DateTime.Now.Millisecond;
             while (m_bAtomActive)
             {
-                t2 = DateTimeOffset.Now;
-                var elapsedtime = t2 - t1;
-                t1 = t2;
-                float elapsed = elapsedtime.Milliseconds * 2;
-
+                tp2 = DateTime.Now.Millisecond;
+                float elapsed = Math.Abs(tp2 - tp1);
+                tp1 = tp2;
                 #region Input Handling
 
                 #region Keyboard
